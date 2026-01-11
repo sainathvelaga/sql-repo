@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        GCP_PROJECT_ID = "my-gcp-project"
+        GCS_BUCKET = "gs://my-sql-bucket-2026/sql"
+        GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-sa-key')
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/sainathvelaga/sql-repo.git'
+            }
+        }
+
+        stage('Validate SQL Files') {
+            steps {
+                sh '''
+                  echo "Validating SQL files..."
+                  find sql -name "*.sql" -type f
+                '''
+            }
+        }
+
+        stage('Authenticate to GCP') {
+            steps {
+                sh '''
+                  gcloud auth activate-service-account \
+                    --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+
+                  gcloud config set project $GCP_PROJECT_ID
+                '''
+            }
+        }
+
+        stage('Sync SQL Files to GCS') {
+            steps {
+                sh '''
+                  gsutil -m rsync -r -d sql/ ${GCS_BUCKET}/
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "SQL files successfully synced to GCS"
+        }
+        failure {
+            echo "GCS sync failed"
+        }
+    }
+}
